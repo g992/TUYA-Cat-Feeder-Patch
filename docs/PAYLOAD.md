@@ -68,9 +68,7 @@ FRAMEWORK_MEDIA_RtspInit();
 
 Исходник лежит здесь:
 
-```text
-payload/rtsp_preload.c
-```
+[rtsp_preload.c](payload/rtsp_preload.c)
 
 Ключевая идея:
 
@@ -282,9 +280,8 @@ The current source code includes an additional safety guard: it checks `/proc/se
 
 The source file is located here:
 
-```text
-payload/rtsp_preload.c
-```
+[rtsp_preload.c](payload/rtsp_preload.c)
+
 
 The core idea:
 

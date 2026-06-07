@@ -66,19 +66,19 @@ ffplay -rtsp_transport tcp rtsp://192.168.1.100/stream0
 
 Фото платы:
 
-```text
-assets/01-board.jpg
-```
-
+<p align="center">
+  <img src="assets/01-board.jpg" width="800">
+</p> 
 На устройстве используется SPI NOR Flash.
 
 Чтобы процессор не мешал чтению флеш-памяти, был временно отключён преобразователь питания 1.8 В обычным куском проволоки.
 
 Фото:
 
-```text
-assets/02-disable-1v8.jpg
-```
+<p align="center">
+  <img src="assets/02-disable-1v8.jpg" width="800">
+</p>
+
 
 После этого прошивка была считана обычной SOIC-прищепкой.
 
@@ -94,9 +94,7 @@ assets/02-disable-1v8.jpg
 
 Подробное описание RTSP payload, его логики, исходного C-кода и процесса сборки вынесено в отдельный файл:
 
-```text
-docs/PAYLOAD.md
-```
+ [PAYLOAD.md](docs/PAYLOAD.md)
 
 Коротко: патч не добавляет сторонний RTSP-сервер, а активирует RTSP-модуль, уже присутствующий в прошивке производителя.
 
@@ -215,9 +213,10 @@ The feeder was opened and the main PCB was inspected.
 
 Board photo:
 
-```text
-assets/01-board.jpg
-```
+<p align="center">
+  <img src="assets/01-board.jpg" width="800">
+</p>
+
 
 The device uses a SPI NOR Flash chip.
 
@@ -225,9 +224,9 @@ To prevent the CPU from interfering with flash access, the 1.8 V CPU power rail 
 
 Photo:
 
-```text
-assets/02-disable-1v8.jpg
-```
+<p align="center">
+  <img src="assets/02-disable-1v8.jpg" width="800">
+</p>
 
 The firmware was then read using a standard SOIC clip.
 
@@ -243,9 +242,7 @@ The resulting firmware image size is:
 
 The detailed description of the RTSP payload, its logic, C source code, and build process has been moved to a separate file:
 
-```text
-docs/PAYLOAD.md
-```
+ [PAYLOAD.md](docs/PAYLOAD.md)
 
 In short: the patch does not add a third-party RTSP server. It activates the RTSP module that already exists in the vendor firmware.
 
