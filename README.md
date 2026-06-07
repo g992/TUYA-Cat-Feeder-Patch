@@ -1,225 +1,319 @@
-# Tuya / SmartLife feeder Ingenic T23: telnet + локальный RTSP
+# Tuya / SmartLife Feeder Ingenic T23: Telnet + Local RTSP
 
-Небольшой набор скриптов для патча прошивки кормушки на Ingenic T23.  
-Цель: получить telnet-доступ и поднять локальный RTSP-поток без облака Tuya.
 
-Проверялось на дампе 8 MiB с разметкой:
+---
 
-- `boot`: `0x000000..0x040000`
-- `kernel`: `0x040000..0x1c0000`
-- `root`: `0x1c0000..0x2c0000`, SquashFS
-- `ro`: `0x2c0000..0x300000`, JFFS2
-- `config`: `0x300000..0x340000`, JFFS2
-- `appfs/system`: `0x340000..0x800000`, SquashFS
+# Contents
 
-> Важно: это не универсальный патч для всех кормушек. Перед прошивкой сверяйте размер дампа и layout.
+* [RU](#ru)
+
+  * [Что получилось](#что-получилось)
+  * [Как был получен дамп](#как-был-получен-дамп)
+  * [RTSP payload](#rtsp-payload)
+  * [Структура репозитория](#структура-репозитория)
+  * [Быстрый старт](#быстрый-старт)
+  * [Проверка после прошивки](#проверка-после-прошивки)
+  * [Важные предупреждения](#важные-предупреждения)
+
+* [EN](#en)
+
+  * [Features](#features)
+  * [How the Firmware Dump Was Obtained](#how-the-firmware-dump-was-obtained)
+  * [RTSP payload](#rtsp-payload-1)
+  * [Repository Structure](#repository-structure)
+  * [Quick Start](#quick-start)
+  * [Verification](#verification)
+  * [Warnings](#warnings)
+
+---
+
+# ru
 
 ## Что получилось
 
 После патча устройство поднимает:
 
-- telnet на `23`;
-- стандартный Tuya-сервис на `6668`;
-- RTSP на `554`.
+* Telnet на порту 23
+* RTSP на порту 554
+* штатный Tuya-сервис на порту 6668
 
-Рабочие RTSP URL, которые стоит проверить:
+Проверенные RTSP URL:
 
 ```text
 rtsp://IP_КОРМУШКИ/stream0
 rtsp://IP_КОРМУШКИ/stream1
+```
+
+Дополнительно в бинарниках были найдены:
+
+```text
 rtsp://IP_КОРМУШКИ/av_stream
 rtsp://IP_КОРМУШКИ/stream0m
 rtsp://IP_КОРМУШКИ/stream1m
 ```
 
-Например:
+Пример проверки:
 
-```sh
-ffplay -rtsp_transport tcp rtsp://192.168.3.136/stream0
+```bash
+ffplay -rtsp_transport tcp rtsp://192.168.1.100/stream0
 ```
+
+---
 
 ## Как был получен дамп
 
-После вскрытия кормушки, обнаружил плату, на ней сразу видна флеш память и дебаг юарт пины
-<img width="960" height="1280" alt="image" src="https://github.com/user-attachments/assets/8b4eeed7-ab90-437e-aedb-2d6172e6fa7f" />
-<img width="960" height="1280" alt="image" src="https://github.com/user-attachments/assets/1daddda9-ed02-4dfa-aa76-e38c1d5df57f" />
+Я вскрыл кормушку и добрался до основной платы.
 
-Чтобы процессор не мешал чтению флеша, я временно отключил его питание 1.8 В: обычным куском проволоки выключил преобразователь 1.8 В для процессора.
-
-<img width="778" height="692" alt="image" src="https://github.com/user-attachments/assets/800c32ed-1df2-40e9-9819-6dd815f53c0d" />
-
-
-После этого обычной SOIC-прищепкой считал полный бинарник прошивки.
-
-Дальше прошивка была разобрана на разделы, в `rootfs` был изменён `/etc/init.d/rcS`, а в `system/appfs` добавлен `rtsp_preload.so`.
-
-В прошивке уже есть RTSP-библиотеки:
+Фото платы:
 
 ```text
-/system/lib/libmedia.so
-/system/lib/librtspserver_v2.so
+assets/01-board.jpg
 ```
 
-Но штатный процесс `tuya_test` не вызывает инициализацию RTSP-сервера.  
-Патч делает это через `LD_PRELOAD`: после старта системы `tuya_test` перезапускается с библиотекой `rtsp_preload.so`, которая вызывает RTSP init внутри процесса `tuya_test`.
+На устройстве используется SPI NOR Flash.
 
-Важный момент: нельзя экспортировать `LD_PRELOAD` перед запуском `/system/app.sh`, потому что `app.sh` — shell-скрипт. В этом случае preload попадает в `busybox/sh`, и система падает. Поэтому в `rcS` используется отложенный перезапуск только ELF-бинарника `/system/bin/tuya_test`.
+Чтобы процессор не мешал чтению флеш-памяти, был временно отключён преобразователь питания 1.8 В обычным куском проволоки.
+
+Фото:
+
+```text
+assets/02-disable-1v8.jpg
+```
+
+После этого прошивка была считана обычной SOIC-прищепкой.
+
+Полученный дамп имеет размер:
+
+```text
+8388608 bytes (8 MiB)
+```
+
+---
+
+## RTSP payload
+
+Подробное описание RTSP payload, его логики, исходного C-кода и процесса сборки вынесено в отдельный файл:
+
+```text
+docs/PAYLOAD.md
+```
+
+Коротко: патч не добавляет сторонний RTSP-сервер, а активирует RTSP-модуль, уже присутствующий в прошивке производителя.
+
+---
 
 ## Структура репозитория
 
 ```text
 .
 ├── README.md
-├── firmware.bin / ingenic_t23_fereder.Bin   # сюда кладётся исходный дамп, не коммитить
+├── ingenic_t23_fereder.Bin
+├── assets/
+├── docs/
+│   └── PAYLOAD.md
 ├── payload/
-│   └── rtsp_preload.so                      # preload-библиотека для RTSP
+│   ├── rtsp_preload.c
+│   └── rtsp_preload.so
 ├── patches/
-│   ├── rcS.telnet                           # только telnet
-│   └── rcS.telnet_rtsp                      # telnet + RTSP
+│   ├── rcS.telnet
+│   └── rcS.telnet_rtsp
 ├── scripts/
-│   ├── extract.sh                           # распаковка прошивки
-│   ├── build_telnet.sh                      # сборка образа только с telnet
-│   ├── build_telnet_rtsp.sh                 # сборка образа с telnet + RTSP
+│   ├── extract.sh
+│   ├── build_payload.sh
+│   ├── build_telnet.sh
+│   ├── build_telnet_rtsp.sh
 │   └── lib/
-│       ├── common.sh
-│       ├── layout.sh
-│       └── rebuild_image.sh
-├── extracted/                               # результат распаковки, не коммитить
-└── dist/                                    # готовые образы, не коммитить
+├── extracted/
+└── dist/
 ```
 
-## Зависимости
-
-Нужны:
-
-- `binwalk`
-- `unsquashfs`
-- `mksquashfs`
-
-macOS:
-
-```sh
-brew install binwalk squashfs
-```
-
-Ubuntu/Debian:
-
-```sh
-sudo apt update
-sudo apt install binwalk squashfs-tools
-```
+---
 
 ## Быстрый старт
 
-Склонировать репозиторий:
+Распаковать прошивку:
 
-```sh
-git clone https://github.com/YOUR_NAME/YOUR_REPO.git
-cd YOUR_REPO
-```
-
-Положить полный дамп флеша в корень репозитория. По умолчанию скрипты ждут имя:
-
-```text
-ingenic_t23_fereder.Bin
-```
-
-Распаковать:
-
-```sh
+```bash
 ./scripts/extract.sh
 ```
 
 Собрать образ только с telnet:
 
-```sh
+```bash
 ./scripts/build_telnet.sh
 ```
 
-Результат будет здесь:
+Собрать образ с telnet и RTSP:
 
-```text
-dist/ingenic_t23_fereder.telnet.Bin
-```
-
-Собрать образ с telnet + RTSP:
-
-```sh
+```bash
 ./scripts/build_telnet_rtsp.sh
 ```
 
-Результат будет здесь:
-
-```text
-dist/ingenic_t23_fereder.telnet_rtsp.Bin
-```
-
-Можно явно указать входной и выходной файл:
-
-```sh
-./scripts/extract.sh ./my_dump.Bin ./extracted
-
-./scripts/build_telnet_rtsp.sh \
-  ./my_dump.Bin \
-  ./dist/my_dump.telnet_rtsp.Bin
-```
+---
 
 ## Проверка после прошивки
 
-Найти IP устройства, затем:
+Проверка Telnet:
 
-```sh
-telnet IP_КОРМУШКИ 23
+```bash
+telnet IP_УСТРОЙСТВА 23
 ```
 
-На устройстве:
+Проверка RTSP:
 
-```sh
+```bash
+ffplay -rtsp_transport tcp rtsp://IP_УСТРОЙСТВА/stream0
+```
+
+Проверка открытых портов:
+
+```bash
 netstat -lntp
 ```
 
-Ожидаемо:
+Ожидаемый результат:
 
 ```text
-0.0.0.0:23     LISTEN  telnetd
-0.0.0.0:554    LISTEN  tuya_test
-0.0.0.0:6668   LISTEN  tuya_test
+0.0.0.0:23
+0.0.0.0:554
+0.0.0.0:6668
 ```
 
-Проверить RTSP:
-
-```sh
-ffplay -rtsp_transport tcp rtsp://IP_КОРМУШКИ/stream0
-```
+---
 
 ## Важные предупреждения
 
-- Перед экспериментами обязательно сохраните оригинальный полный дамп флеша.
-- Не прошивайте образ, если размер исходного дампа не `8388608` байт.
-- Не публикуйте свои реальные ключи Tuya, Wi-Fi пароли и серийники из логов.
-- Telnet без пароля небезопасен. Используйте только в своей локальной сети или для исследования.
-- Всё делаете на свой риск: можно получить кирпич, если ошибиться с образом или флешером.
+* Всегда сохраняйте оригинальный дамп.
+* Не публикуйте реальные Tuya-ключи и пароли.
+* Telnet открыт без пароля.
+* Все действия выполняются на ваш риск.
 
-## Что делают скрипты
+---
 
-`extract.sh`:
+# en
 
-1. проверяет размер дампа;
-2. запускает `binwalk`;
-3. извлекает `rootfs` с offset `0x1c0000`;
-4. извлекает `system/appfs` с offset `0x340000`.
+## Features
 
-`build_telnet.sh`:
+After applying the patch, the device exposes:
 
-1. кладёт `patches/rcS.telnet` в `extracted/rootfs/etc/init.d/rcS`;
-2. пересобирает SquashFS-разделы;
-3. вставляет их обратно в копию исходного дампа;
-4. сохраняет результат в `dist/`.
+* Telnet on port 23
+* RTSP on port 554
+* Original Tuya service on port 6668
 
-`build_telnet_rtsp.sh`:
+Verified RTSP URLs:
 
-1. кладёт `patches/rcS.telnet_rtsp` в `extracted/rootfs/etc/init.d/rcS`;
-2. кладёт `payload/rtsp_preload.so` в `extracted/system/lib/rtsp_preload.so`;
-3. пересобирает SquashFS-разделы;
-4. вставляет их обратно в копию исходного дампа;
-5. сохраняет результат в `dist/`.
+```text
+rtsp://DEVICE_IP/stream0
+rtsp://DEVICE_IP/stream1
+```
+
+---
+
+## How the Firmware Dump Was Obtained
+
+The feeder was opened and the main PCB was inspected.
+
+Board photo:
+
+```text
+assets/01-board.jpg
+```
+
+The device uses a SPI NOR Flash chip.
+
+To prevent the CPU from interfering with flash access, the 1.8 V CPU power rail was temporarily disabled using a simple wire.
+
+Photo:
+
+```text
+assets/02-disable-1v8.jpg
+```
+
+The firmware was then read using a standard SOIC clip.
+
+The resulting firmware image size is:
+
+```text
+8388608 bytes (8 MiB)
+```
+
+---
+
+## RTSP payload
+
+The detailed description of the RTSP payload, its logic, C source code, and build process has been moved to a separate file:
+
+```text
+docs/PAYLOAD.md
+```
+
+In short: the patch does not add a third-party RTSP server. It activates the RTSP module that already exists in the vendor firmware.
+
+---
+
+## Repository Structure
+
+```text
+.
+├── README.md
+├── docs/
+│   └── PAYLOAD.md
+├── payload/
+│   ├── rtsp_preload.c
+│   └── rtsp_preload.so
+├── patches/
+├── scripts/
+│   ├── build_payload.sh
+│   ├── extract.sh
+│   ├── build_telnet.sh
+│   └── build_telnet_rtsp.sh
+├── extracted/
+└── dist/
+```
+
+---
+
+## Quick Start
+
+Extract firmware:
+
+```bash
+./scripts/extract.sh
+```
+
+Build Telnet-only firmware:
+
+```bash
+./scripts/build_telnet.sh
+```
+
+Build Telnet + RTSP firmware:
+
+```bash
+./scripts/build_telnet_rtsp.sh
+```
+
+---
+
+## Verification
+
+Check Telnet:
+
+```bash
+telnet DEVICE_IP 23
+```
+
+Check RTSP:
+
+```bash
+ffplay -rtsp_transport tcp rtsp://DEVICE_IP/stream0
+```
+
+---
+
+## Warnings
+
+* Always keep the original dump.
+* Do not publish Tuya keys or Wi-Fi credentials.
+* Telnet is enabled without authentication.
+* Use at your own risk.

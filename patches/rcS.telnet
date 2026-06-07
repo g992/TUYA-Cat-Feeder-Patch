@@ -1,0 +1,48 @@
+#!/bin/sh
+
+# Set mdev
+echo /sbin/mdev > /proc/sys/kernel/hotplug
+/sbin/mdev -s && echo "mdev is ok......"
+
+# Set Global Environment
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export PATH=/system/bin:$PATH
+export LD_LIBRARY_PATH=/system/lib:/lib
+
+# networking
+ifconfig lo up
+
+# add rtsp send encoder buffer
+sysctl -w net.core.wmem_max=26214400
+sysctl -w net.core.wmem_default=26214400
+
+# Mount system partition
+mount -t squashfs /dev/mtdblock5 /system
+
+# Mount config partition
+pindex=4
+pname=config
+pline=$(cat /proc/mtd | grep -w "\"$pname\"")
+p1=${pline%:*}
+p2=${p1#mtd*}
+[ -n "${p2}" ] && pindex=$p2
+mkdir -p /config && mount -t jffs2 /dev/mtdblock$pindex /config
+
+# Mount ro partition
+pindex=3
+pname=ro
+pline=$(cat /proc/mtd | grep -w "\"$pname\"")
+p1=${pline%:*}
+p2=${p1#mtd*}
+[ -n "${p2}" ] && pindex=$p2
+mkdir -p /tmp/mnt/ro && mount -t jffs2 -o ro /dev/mtdblock$pindex /tmp/mnt/ro
+
+# Enable telnet
+telnetd -l /bin/sh -p 23 &
+
+# Run init script
+if [ -f /config/test.sh -a -x /config/test.sh ] ; then
+    /config/test.sh
+else
+    /system/app.sh
+fi

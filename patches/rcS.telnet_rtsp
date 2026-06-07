@@ -1,0 +1,70 @@
+#!/bin/sh
+
+# Set mdev
+echo /sbin/mdev > /proc/sys/kernel/hotplug
+/sbin/mdev -s && echo "mdev is ok......"
+
+# Set Global Environment
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export PATH=/system/bin:$PATH
+export LD_LIBRARY_PATH=/system/lib:/lib
+
+# networking
+ifconfig lo up
+
+# add rtsp send encoder buffer
+sysctl -w net.core.wmem_max=26214400
+sysctl -w net.core.wmem_default=26214400
+
+# Mount system partition
+mount -t squashfs /dev/mtdblock5 /system
+
+# Mount config partition
+pindex=4
+pname=config
+pline=$(cat /proc/mtd | grep -w "\"$pname\"")
+p1=${pline%:*}
+p2=${p1#mtd*}
+[ -n "${p2}" ] && pindex=$p2
+mkdir -p /config && mount -t jffs2 /dev/mtdblock$pindex /config
+
+# Mount ro partition
+pindex=3
+pname=ro
+pline=$(cat /proc/mtd | grep -w "\"$pname\"")
+p1=${pline%:*}
+p2=${p1#mtd*}
+[ -n "${p2}" ] && pindex=$p2
+mkdir -p /tmp/mnt/ro && mount -t jffs2 -o ro /dev/mtdblock$pindex /tmp/mnt/ro
+
+# Enable telnet
+telnetd -l /bin/sh -p 23 &
+
+# Enable RTSP.
+#
+# Do not export LD_PRELOAD before /system/app.sh:
+# app.sh is a shell script, and preloading rtsp_preload.so into busybox/sh
+# causes a crash. Instead, start the vendor app normally, then restart only
+# the ELF binary tuya_test with LD_PRELOAD.
+(
+    sleep 75
+
+    if [ -f /system/lib/rtsp_preload.so ] && pidof tuya_test >/dev/null 2>&1; then
+        echo "Restarting tuya_test with RTSP preload"
+        killall tuya_test
+        sleep 2
+
+        LD_LIBRARY_PATH=/system/lib:/lib \
+        LD_PRELOAD=/system/lib/rtsp_preload.so \
+        /system/bin/tuya_test &
+    else
+        echo "RTSP preload skipped"
+    fi
+) &
+
+# Run init script normally, WITHOUT LD_PRELOAD
+if [ -f /config/test.sh -a -x /config/test.sh ] ; then
+    /config/test.sh
+else
+    /system/app.sh
+fi

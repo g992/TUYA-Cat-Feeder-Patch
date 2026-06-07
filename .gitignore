@@ -1,0 +1,18 @@
+# Original firmware dumps and generated images
+*.bin
+*.Bin
+*.BIN
+dist/*
+!dist/.gitkeep
+
+# Extracted firmware contents
+extracted/*
+!extracted/.gitkeep
+
+# Tool output
+*.squashfs
+binwalk.txt
+layout.txt
+
+# macOS/Linux noise
+.DS_Store
